@@ -8,11 +8,6 @@ cv::Scalar setColor(Local<Object> objColor);
 cv::Point setPoint(Local<Object> objPoint);
 cv::Rect* setRect(Local<Object> objRect);
 
-inline double round( double d )
-{
-    return floor( d + 0.5 );
-}
-
 void
 Matrix::Init(Handle<Object> target) {
 	HandleScope scope;
