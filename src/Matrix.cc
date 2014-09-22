@@ -53,6 +53,8 @@ Matrix::Init(Handle<Object> target) {
 	NODE_SET_PROTOTYPE_METHOD(constructor, "pyrUp", PyrUp);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "channels", Channels);
 
+	NODE_SET_PROTOTYPE_METHOD(constructor, "crop", Crop);
+
 	NODE_SET_PROTOTYPE_METHOD(constructor, "convertGrayscale", ConvertGrayscale);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "convertHSVscale", ConvertHSVscale);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "gaussianBlur", GaussianBlur);
@@ -100,8 +102,8 @@ Matrix::Init(Handle<Object> target) {
 	NODE_SET_PROTOTYPE_METHOD(constructor, "pushBack", PushBack);
 
 	NODE_SET_PROTOTYPE_METHOD(constructor, "putText", PutText);
-    
-    NODE_SET_PROTOTYPE_METHOD(constructor, "getPerspectiveTransform", GetPerspectiveTransform); 
+
+    NODE_SET_PROTOTYPE_METHOD(constructor, "getPerspectiveTransform", GetPerspectiveTransform);
     NODE_SET_PROTOTYPE_METHOD(constructor, "warpPerspective", WarpPerspective);
 
 	NODE_SET_METHOD(constructor, "Eye", Eye);
@@ -128,7 +130,9 @@ Matrix::New(const Arguments &args) {
 	if (args.Length() == 0){
 		mat = new Matrix;
 	} else if (args.Length() == 2 && args[0]->IsInt32() && args[1]->IsInt32()){
-			mat = new Matrix(args[0]->IntegerValue(), args[1]->IntegerValue());
+        mat = new Matrix(args[0]->IntegerValue(), args[1]->IntegerValue());
+    } else if (args.Length() == 3 && args[0]->IsInt32() && args[1]->IsInt32() && args[2]->IsInt32()) {
+        mat = new Matrix(args[0]->IntegerValue(), args[1]->IntegerValue(), args[2]->IntegerValue());
 	} else if (args.Length() == 5) {
 		Matrix *other = ObjectWrap::Unwrap<Matrix>(args[0]->ToObject());
 		int x = args[1]->IntegerValue();
@@ -150,6 +154,10 @@ Matrix::Matrix(): ObjectWrap() {
 
 Matrix::Matrix(int rows, int cols): ObjectWrap() {
     mat = cv::Mat(rows, cols, CV_32FC3);
+}
+
+Matrix::Matrix(int rows, int cols, int type): ObjectWrap() {
+    mat = cv::Mat(rows, cols, type);
 }
 
 Matrix::Matrix(cv::Mat m, cv::Rect roi): ObjectWrap() {
@@ -317,6 +325,31 @@ Matrix::Clone(const Arguments& args){
 }
 
 Handle<Value>
+Matrix::Crop(const Arguments& args){
+
+	SETUP_FUNCTION(Matrix)
+
+  	if ((args.Length() == 4) && (args[0]->IsNumber()) && (args[1]->IsNumber()) && (args[2]->IsNumber()) && (args[3]->IsNumber())){
+
+  		int x = args[0]->IntegerValue();
+  		int y = args[1]->IntegerValue();
+  		int width = args[2]->IntegerValue();
+  		int height = args[3]->IntegerValue();
+
+		cv::Rect roi(x, y, width, height);
+
+		Local<Object> im_h = Matrix::constructor->GetFunction()->NewInstance();
+		Matrix *m = ObjectWrap::Unwrap<Matrix>(im_h);
+		m->mat = self->mat(roi);
+
+		return scope.Close(im_h);
+	}
+	else{
+		return scope.Close(v8::String::New("Insufficient or wrong arguments"));
+	}
+}
+
+Handle<Value>
 Matrix::Row(const Arguments& args){
 	SETUP_FUNCTION(Matrix)
 
@@ -415,7 +448,7 @@ Matrix::ToBuffer(const v8::Arguments& args){
     if ((args.Length() > 0) && (args[0]->IsFunction())) {
         return Matrix::ToBufferAsync(args);
     }
-  
+
     // SergeMv changes
     // img.toBuffer({ext: ".png", pngCompression: 9}); // default png compression is 3
     // img.toBuffer({ext: ".jpg", jpegQuality: 80});
@@ -445,7 +478,7 @@ Matrix::ToBuffer(const v8::Arguments& args){
             int compression = options->Get(v8::String::New("pngCompression"))->IntegerValue();
             params.push_back(CV_IMWRITE_PNG_COMPRESSION);
             params.push_back(compression);
-        }        
+        }
     }
     //---------------------------
 
@@ -510,7 +543,7 @@ Matrix::ToBufferAsync(const v8::Arguments& args){
           int compression = options->Get(v8::String::New("pngCompression"))->IntegerValue();
           baton->params.push_back(CV_IMWRITE_PNG_COMPRESSION);
           baton->params.push_back(compression);
-      }        
+      }
   }
 
   baton->ext = ext;
@@ -629,11 +662,11 @@ Matrix::Ellipse(const v8::Arguments& args){
 		y = args[1]->Uint32Value();
 		width = args[2]->Uint32Value();
 		height = args[3]->Uint32Value();
-	
+
 		if(args[4]->IsArray()) {
 			Local<Object> objColor = args[4]->ToObject();
 			color = setColor(objColor);
-		}  
+		}
 
 		if(args[5]->IntegerValue())
 			thickness = args[5]->IntegerValue();
@@ -718,7 +751,7 @@ Matrix::Save(const v8::Arguments& args) {
   if (args.Length() > 1) {
     return SaveAsync(args);
   }
-  
+
   if (!args[0]->IsString())
     return v8::ThrowException(v8::Exception::TypeError(String::New("filename required")));
 
@@ -926,7 +959,7 @@ Matrix::BilateralFilter(const v8::Arguments &args) {
       }
     }
   }
-  
+
   cv::bilateralFilter(self->mat, filtered, d, sigmaColor, sigmaSpace, borderType);
   filtered.copyTo(self->mat);
 
@@ -1328,7 +1361,7 @@ Matrix::Resize(const v8::Arguments& args){
     CV_INTER_LANCZOS4  =4
   */
   int interpolation = (args.Length() < 3) ? (int)cv::INTER_LINEAR : args[2]->Uint32Value();
-  
+
   Matrix *self = ObjectWrap::Unwrap<Matrix>(args.This());
   cv::Mat res = cv::Mat(x, y, CV_32FC3);
   cv::resize(self->mat, res, cv::Size(x, y), 0, 0, interpolation);
@@ -1369,18 +1402,18 @@ Matrix::Rotate(const v8::Arguments& args){
     // Now flip the image
     int mode = -1; // flip around both axes
     // If counterclockwise, flip around the x-axis
-    if (angle2 == 90) { mode = 0; } 
+    if (angle2 == 90) { mode = 0; }
     // If clockwise, flip around the y-axis
-    if (angle2 == 270) { mode = 1; } 
+    if (angle2 == 270) { mode = 1; }
     cv::flip(self->mat, self->mat, mode);
-    
+
     return scope.Close(Undefined());
   }
   //-------------
 
   int x = args[1]->IsUndefined() ? round(self->mat.size().width / 2) : args[1]->Uint32Value();
   int y = args[1]->IsUndefined() ? round(self->mat.size().height / 2) : args[2]->Uint32Value();
-  
+
   cv::Point center = cv::Point(x,y);
   rotMatrix = getRotationMatrix2D(center, angle, 1.0);
 
@@ -1451,7 +1484,7 @@ Matrix::AdjustROI(const v8::Arguments& args) {
 Handle<Value>
 Matrix::LocateROI(const v8::Arguments& args) {
 	SETUP_FUNCTION(Matrix)
- 
+
   cv::Size wholeSize;
   cv::Point ofs;
 
@@ -1560,7 +1593,7 @@ Matrix::CopyTo(const v8::Arguments& args) {
     Matrix * self = ObjectWrap::Unwrap<Matrix>(args.This());
     int width = self->mat.size().width;
     int height = self->mat.size().height;
-    
+
     // param 0 - destination image:
     Matrix *dest = ObjectWrap::Unwrap<Matrix>(args[0]->ToObject());
     // param 1 - x coord of the destination
@@ -1592,7 +1625,7 @@ Matrix::CvtColor(const v8::Arguments& args) {
     //
     if (!strcmp(sTransform, "CV_BGR2GRAY")) { iTransform = CV_BGR2GRAY; }
     else if (!strcmp(sTransform, "CV_GRAY2BGR")) { iTransform = CV_GRAY2BGR; }
-    // 
+    //
     else if (!strcmp(sTransform, "CV_BGR2XYZ")) { iTransform = CV_BGR2XYZ; }
     else if (!strcmp(sTransform, "CV_XYZ2BGR")) { iTransform = CV_XYZ2BGR; }
     //
@@ -1615,7 +1648,7 @@ Matrix::CvtColor(const v8::Arguments& args) {
     else if (!strcmp(sTransform, "CV_BayerGB2BGR")) { iTransform = CV_BayerGB2BGR; }
     else if (!strcmp(sTransform, "CV_BayerRG2BGR")) { iTransform = CV_BayerRG2BGR; }
     else if (!strcmp(sTransform, "CV_BayerGR2BGR")) { iTransform = CV_BayerGR2BGR; }
-    else { 
+    else {
         iTransform = 0; // to avoid compiler warning
         return v8::ThrowException(Exception::TypeError(String::New(
 			"Conversion code is unsupported")));
@@ -1682,7 +1715,7 @@ Matrix::Merge(const v8::Arguments& args) {
 Handle<Value>
 Matrix::EqualizeHist(const v8::Arguments& args) {
     HandleScope scope;
-    
+
     Matrix * self = ObjectWrap::Unwrap<Matrix>(args.This());
 
     cv::equalizeHist(self->mat, self->mat);
@@ -1737,7 +1770,7 @@ Matrix::MatchTemplate(const v8::Arguments& args) {
     TM_CCOEFF        =4
     TM_CCOEFF_NORMED =5
   */
-   
+
   HandleScope scope;
 
   Matrix *self = ObjectWrap::Unwrap<Matrix>(args.This());
@@ -1814,7 +1847,7 @@ Matrix::PutText(const v8::Arguments& args) {
   HandleScope scope;
 
   Matrix *self = ObjectWrap::Unwrap<Matrix>(args.This());
-  
+
   v8::String::AsciiValue textString(args[0]);
   char *text = (char *) malloc(textString.length() + 1);
   strcpy(text, *textString);
@@ -1905,7 +1938,7 @@ Matrix::WarpPerspective(const v8::Arguments& args) {
 Handle<Value>
 Matrix::CopyWithMask(const v8::Arguments& args) {
     SETUP_FUNCTION(Matrix)
-    
+
     // param 0 - destination image:
     Matrix *dest = ObjectWrap::Unwrap<Matrix>(args[0]->ToObject());
     // param 1 - mask. same size as src and dest
@@ -1920,7 +1953,7 @@ Matrix::CopyWithMask(const v8::Arguments& args) {
 Handle<Value>
 Matrix::SetWithMask(const v8::Arguments& args) {
     SETUP_FUNCTION(Matrix)
-    
+
     // param 0 - target value:
     Local<Object> valArray = args[0]->ToObject();
     cv::Scalar newvals;
@@ -1939,7 +1972,7 @@ Matrix::SetWithMask(const v8::Arguments& args) {
 Handle<Value>
 Matrix::MeanWithMask(const v8::Arguments& args) {
     SETUP_FUNCTION(Matrix)
-    
+
     // param 0 - mask. same size as src and dest
     Matrix *mask = ObjectWrap::Unwrap<Matrix>(args[0]->ToObject());
 
