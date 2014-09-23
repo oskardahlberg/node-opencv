@@ -8,6 +8,11 @@ cv::Scalar setColor(Local<Object> objColor);
 cv::Point setPoint(Local<Object> objPoint);
 cv::Rect* setRect(Local<Object> objRect);
 
+inline double round( double d )
+{
+    return floor( d + 0.5 );
+}
+
 void
 Matrix::Init(Handle<Object> target) {
 	HandleScope scope;
@@ -1659,6 +1664,9 @@ Matrix::CvtColor(const v8::Arguments& args) {
     //
     if (!strcmp(sTransform, "CV_BGR2GRAY")) { iTransform = CV_BGR2GRAY; }
     else if (!strcmp(sTransform, "CV_GRAY2BGR")) { iTransform = CV_GRAY2BGR; }
+    //
+    else if (!strcmp(sTransform, "CV_BGR2BGRA")) { iTransform = CV_BGR2BGRA; }
+    else if (!strcmp(sTransform, "CV_BGRA2BGR")) { iTransform = CV_BGRA2BGR; }
     //
     else if (!strcmp(sTransform, "CV_BGR2XYZ")) { iTransform = CV_BGR2XYZ; }
     else if (!strcmp(sTransform, "CV_XYZ2BGR")) { iTransform = CV_XYZ2BGR; }
